@@ -1,0 +1,11 @@
+name: hs-butler
+version: 1.0.0
+license: BSD3
+license-file: LICENSE
+cabal-version: >= 1.18
+build-type: Simple
+
+executable butler
+    build-depends: base < 5, turtle
+    main-is: Main.hs
+    default-language: Haskell2010
