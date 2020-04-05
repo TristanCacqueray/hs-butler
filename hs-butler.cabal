@@ -6,6 +6,12 @@ cabal-version: >= 1.18
 build-type: Simple
 
 executable butler
-    build-depends: base < 5, turtle
+    build-depends:
+      base,
+      network-uri,
+      optparse-applicative,
+      split,
+      text,
+      turtle
     main-is: Main.hs
     default-language: Haskell2010
