@@ -3,66 +3,64 @@
 
 module Main where
 
+import Data.Maybe
 import Data.Text as T
-import Options.Applicative
-import Data.Semigroup ((<>))
 import Network.URI
+import Options.Applicative
 import qualified Turtle
 
 data Opts = Opts
-    { optGlobalFlag :: !Bool
-    , optCommand :: !Command
-    }
+  { optGlobalFlag :: !Bool,
+    optCommand :: !Command
+  }
 
 data Command
-    = Clone String
+  = Clone String
 
 main :: IO ()
 main = do
-    (opts :: Opts) <- execParser optsParser
-    case optCommand opts of
-        Clone url -> clone url
+  (opts :: Opts) <- execParser optsParser
+  home <- Turtle.need "HOME"
+  case optCommand opts of
+    Clone url -> clone (fromMaybe "" home <> "/src/") (pack url)
   where
     optsParser :: ParserInfo Opts
     optsParser =
-        info (helper <*> programOptions)
-             (fullDesc <> progDesc "optparse subcommands example" <>
-             header "Butler")
+      info
+        (helper <*> programOptions)
+        ( fullDesc <> progDesc "optparse subcommands example"
+            <> header "Butler"
+        )
     programOptions :: Parser Opts
     programOptions =
-        Opts <$> switch (long "debug" <> help "TBD: add debug") <*>
-        hsubparser (cloneCommand)
+      Opts <$> switch (long "debug" <> help "TBD: add debug")
+        <*> hsubparser cloneCommand
     cloneCommand :: Mod CommandFields Command
     cloneCommand =
-        command "clone"
-                (info cloneOptions (progDesc "Clone a thing"))
+      command
+        "clone"
+        (info cloneOptions (progDesc "Clone a thing"))
     cloneOptions :: Parser Command
     cloneOptions =
-        Clone <$>
-        strArgument (metavar "NAME" <> help "Name of the thing to clone")
-
+      Clone
+        <$> strArgument (metavar "NAME" <> help "Name of the thing to clone")
 
 -- The clone command
-urlToDir :: String -> Maybe String
+
+-- | Strip scheme, port, auth and query fragments
+urlToDir :: Text -> Maybe Text
 urlToDir url = do
-  uri <- parseURI url
+  uri <- parseURI (unpack (replace "/r/" "/" url))
   uriAuth <- uriAuthority uri
-  case uriPath uri of
-    ""   -> Nothing
-    path -> Just $ uriRegName uriAuth ++ stripGitSuffix path
-  where stripGitSuffix s =
-          case stripSuffix ".git" (pack s) of
-            Just p -> unpack p
-            _      -> s
+  return (pack (uriRegName uriAuth <> uriPath uri))
 
-unsafeStringToLine :: String -> Turtle.Line
-unsafeStringToLine = Turtle.unsafeTextToLine . T.pack
-
-clone :: String -> IO ()
-clone url = clone' url dir
-  where
-    dir = case urlToDir url of
-      Just path -> path
-      Nothing   -> error "Invalid url" ++ url
-    clone' url dir = Turtle.echo $ unsafeStringToLine $
-      "Running: mkdir -p ~/git/" ++ dir ++ "; git clone " ++ url ++ " " ++ dir
+clone :: Text -> Text -> IO ()
+clone base url = do
+  case urlToDir url of
+    Nothing -> fail "Invalid url"
+    Just urlDir -> do
+      gitDirExist <- Turtle.testdir (Turtle.fromText (dest <> "/.git"))
+      Turtle.unless gitDirExist (Turtle.procs "git" ["clone", url, dest] mempty)
+      Turtle.echo (Turtle.unsafeTextToLine dest)
+      where
+        dest = base <> fromMaybe urlDir (stripSuffix ".git" urlDir)
